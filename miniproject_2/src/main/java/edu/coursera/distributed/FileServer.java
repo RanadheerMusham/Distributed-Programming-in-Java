@@ -1,12 +1,11 @@
 package edu.coursera.distributed;
 
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.File;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A basic and very limited implementation of a file server that responds to GET
@@ -32,41 +31,54 @@ public final class FileServer {
          */
         while (true) {
 
-            // TODO Delete this once you start working on your solution.
-            throw new UnsupportedOperationException();
+            final Socket accept = socket.accept();
 
-            // TODO 1) Use socket.accept to get a Socket object
+             String path = getFileName(accept.getInputStream());
 
-            /*
-             * TODO 2) Using Socket.getInputStream(), parse the received HTTP
-             * packet. In particular, we are interested in confirming this
-             * message is a GET and parsing out the path to the file we are
-             * GETing. Recall that for GET HTTP packets, the first line of the
-             * received packet will look something like:
-             *
-             *     GET /path/to/file HTTP/1.1
-             */
+            final OutputStream outputStream = accept.getOutputStream();
+            if(path == null || path.isEmpty()){
+                write404(outputStream);
 
-            /*
-             * TODO 3) Using the parsed path to the target file, construct an
-             * HTTP reply and write it to Socket.getOutputStream(). If the file
-             * exists, the HTTP reply should be formatted as follows:
-             *
-             *   HTTP/1.0 200 OK\r\n
-             *   Server: FileServer\r\n
-             *   \r\n
-             *   FILE CONTENTS HERE\r\n
-             *
-             * If the specified file does not exist, you should return a reply
-             * with an error code 404 Not Found. This reply should be formatted
-             * as:
-             *
-             *   HTTP/1.0 404 Not Found\r\n
-             *   Server: FileServer\r\n
-             *   \r\n
-             *
-             * Don't forget to close the output stream.
-             */
+            } else {
+                final PCDPPath pcdpPath = new PCDPPath(path);
+                final String s = fs.readFile(pcdpPath);
+                if (s == null) {
+                    write404(outputStream);
+                } else{
+                    writeFile200(outputStream, s);
+                }
+            }
+            outputStream.flush();
+            outputStream.close();
         }
+    }
+
+    private void writeFile200(OutputStream outputStream, String s) {
+        final PrintStream printer = new PrintStream(outputStream);
+        printer.print("HTTP/1.0 200 OK\r\n");
+        printer.print("Server: FileServer\r\n");
+        printer.print("Content-Length: " + s.length() + "\r\n");
+        printer.print("\r\n");
+        printer.print(s);
+        printer.print("\r\n");
+    }
+
+    private void write404(OutputStream outputStream) throws IOException {
+        String s = "HTTP/1.0 404 Not Found\\r\\n\n" +
+                "   Server: FileServer\\r\\n\n" +
+                "   \r\\n";
+        outputStream.write(s.getBytes());
+    }
+
+    public static String getFileName(InputStream in) {
+
+        Scanner scanner = new Scanner(in).useDelimiter("\r\n");
+        final String next = scanner.next();
+        Pattern pattern = Pattern.compile("GET (.+) HTTP.*");
+        Matcher matcher = pattern.matcher(next);
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(1);
     }
 }
